@@ -1,6 +1,6 @@
 from dataclasses import dataclass
 
-from app.models import RouteResult
+from app.models import CustomerTier, RouteResult
 
 @dataclass(frozen=True)
 class Rule:
@@ -22,11 +22,21 @@ RULES = (
 )
 
 CRITICAL_KEYWORDS = ("hacked", "stolen", "fraud", "compromised")
+GLOBAL_CRITICAL_KEYWORDS = ("hacked", "fraud", "compromised")
 HIGH_KEYWORDS = ("blocked", "cannot access", "can't access", "missing money")
 
-def route_message(message: str) -> RouteResult:
+def route_message(message: str, customer_tier: CustomerTier = "standard") -> RouteResult:
     normalized = " ".join(message.lower().split())
 
+    result = _route_by_keyword(normalized)
+
+    if any(keyword in normalized for keyword in GLOBAL_CRITICAL_KEYWORDS):
+        return result.model_copy(update={"severity": "critical"})
+    if customer_tier == "vip" and result.severity == "medium":
+        return result.model_copy(update={"severity": "high"})
+    return result
+
+def _route_by_keyword(normalized: str) -> RouteResult:
     for rule in RULES:
         if any(keyword in normalized for keyword in rule.keywords):
             severity = rule.severity
